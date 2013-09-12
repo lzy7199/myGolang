@@ -1,4 +1,6 @@
 myGolang
 ========
 
-some example for golang
+server and client test code by golang tcpsocket.
+
+please help me, thank you!
