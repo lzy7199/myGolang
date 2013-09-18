@@ -14,7 +14,8 @@ import (
 )
 
 /**聊天同步模型类对象**/
-var chatChan chan *Model.ChatSyncModel
+// var chatChan chan *Model.ChatSyncModel
+var chatSyncModelTotal *Model.ChatSyncModel
 
 /**多路复用，用于跟踪每一个调用特定的回调函数**/
 type ServeMux struct {
@@ -23,11 +24,11 @@ type ServeMux struct {
 
 func init() {
 	mainMux.m = make(map[string]func(*net.TCPConn, map[string]interface{}) map[string]interface{})
-	chatChan = make(chan *Model.ChatSyncModel, 1)
-	chatSyncModel := new(Model.ChatSyncModel)
-	chatSyncModel.SocketMap = make(map[*net.TCPConn](*Model.ChatAvatar))
-	chatSyncModel.NameMap = make(map[int]map[string](*net.TCPConn))
-	chatChan <- chatSyncModel
+	// chatChan = make(chan *Model.ChatSyncModel, 1)
+	chatSyncModelTotal = new(Model.ChatSyncModel)
+	chatSyncModelTotal.SocketMap = make(map[*net.TCPConn](*Model.ChatAvatar))
+	chatSyncModelTotal.NameMap = make(map[int]map[string](*net.TCPConn))
+	// chatChan <- chatSyncModel
 	go tickHeartBeat()
 }
 
@@ -38,32 +39,84 @@ result：int 读取的int32值
 		error 错误对象
 **/
 func tickHeartBeat() {
-	c := time.Tick(1 * time.Minute)
+	defer func() {
+		if finalErr := recover(); finalErr != nil {
+			Utils.LogErrInfo("tickHeartBeat finalErr = %s", finalErr)
+			Utils.CheckPanic(finalErr)
+		}
+	}()
+	c := time.Tick(5 * time.Minute)
 	for _ = range c {
 		// 定时循环发送心跳包
-		chatSyncModel := popChatChan()
-		pushChatChan(chatSyncModel)
-		Utils.LogInfo("发心跳包，当前登陆人数：%d", len(chatSyncModel.SocketMap))
-		for conn, ca := range chatSyncModel.SocketMap {
-			// 判断是发送心跳包还是断开连接
-			if ca.IsAlive == 1 {
-				// 发送心跳包
-				ca.IsAlive = 0
-				writeBackSuccess(conn, createResult("IsHeartBeat", -1, nil, -1))
-			} else {
-				// 没反应，直接断开
-				exitMap(conn)
-			}
+		checkHeartBeat()
+	}
+}
+
+func checkHeartBeat() {
+	chatSyncModelTotal.M.Lock()
+	defer chatSyncModelTotal.M.Unlock()
+	Utils.LogInfo("发心跳包，当前登陆人数：%d", len(chatSyncModelTotal.SocketMap))
+	for conn, ca := range chatSyncModelTotal.SocketMap {
+		// 判断是发送心跳包还是断开连接
+		if ca.IsAlive == 1 {
+			// 发送心跳包
+			ca.IsAlive = 0
+			writeBackSuccessWithoutLock(conn, createResult("IsHeartBeat", -1, nil, -1), chatSyncModelTotal)
+		} else {
+			// 没反应，直接断开
+			// exitMapWithoutLock(conn, chatSyncModelTotal)
+			Utils.LogErrInfo("%d号童鞋没发心跳包给服务器哦！", ca.Uid)
 		}
 	}
 }
 
-func pushChatChan(chatSyncModel *Model.ChatSyncModel) {
-	chatChan <- chatSyncModel
-}
+// for {
+// 	// 定时循环发送心跳包
+// 	func() {
+// 		chatSyncModel := getChatSyncModel()
+// 		defer setChatSyncModel(chatSyncModel)
+// 		Utils.LogInfo("发心跳包，当前登陆人数：%d", len(chatSyncModel.SocketMap))
+// 		for conn, ca := range chatSyncModel.SocketMap {
+// 			// 判断是发送心跳包还是断开连接
+// 			if ca.IsAlive == 1 {
+// 				// 发送心跳包
+// 				ca.IsAlive = 0
+// 				writeBackSuccess(conn, createResult("IsHeartBeat", -1, nil, -1))
+// 			} else {
+// 				// 没反应，直接断开
+// 				exitMapWithoutLock(conn, chatSyncModel)
+// 			}
+// 		}
+// 	}()
+// 	time.Sleep(60e9)
+// }
 
-func popChatChan() *Model.ChatSyncModel {
-	return <-chatChan
+// func pushChatChan(chatSyncModel *Model.ChatSyncModel) {
+// 	Utils.LogInfo("setChatSyncModel, num = %d", len(chatChan))
+// 	if len(chatChan) == 0 {
+// 		chatChan <- chatSyncModel
+// 	}
+// }
+
+// func popChatChan() *Model.ChatSyncModel {
+// 	Utils.LogInfo("getChatSyncModel, num = %d", len(chatChan))
+// 	return <-chatChan
+// }
+
+// func getChatSyncModel() *Model.ChatSyncModel {
+// 	return chatSyncModelTotal
+// }
+
+func GetCurClientNum() int {
+	// defer func() {
+	// 	if finalErr := recover(); finalErr != nil {
+	// 		Utils.LogErrInfo("GetCurClientNum finalErr = %s", finalErr)
+	// 		Utils.CheckPanic(finalErr)
+	// 	}
+	// }()
+	// Utils.LogInfo("chatSyncModelTotal = %s", chatSyncModelTotal)
+	// defer setChatSyncModel(chatSyncModel)
+	return len(chatSyncModelTotal.SocketMap)
 }
 
 /**
@@ -79,6 +132,7 @@ func RegisterAllFunc() {
 
 	// --------------其他模块--------------
 	handleFunc("IsHeartBeat", IsHeartBeat)
+	handleFunc("GetClientNum", GetClientNum)
 }
 
 /**
@@ -108,15 +162,22 @@ func HandleChat(conn *net.TCPConn, clientIndex int) {
 	// 	fmt.Printf("bytes = %s", string(bytes))
 	// 	Utils.LogInfo("bytes = %s", string(bytes))
 	// }
+	defer func() {
+		if finalErr := recover(); finalErr != nil {
+			Utils.LogErrInfo("HandleChat finalErr = %s", finalErr)
+			Utils.CheckPanic(finalErr)
+		}
+	}()
 	for {
 		// 读出长度
 		length, err := readInt(conn)
 		if err != nil {
 			Utils.LogInfo("readInt error, error = %s", err.Error())
-			checkIsExitMap(conn, err)
+			writeBackException("", conn, 20001, -1)
+			exitMap(conn)
 			break
 		}
-		Utils.LogInfo("收到的包长度为：%d\n", length)
+		// Utils.LogInfo("收到的包长度为：%d\n", length)
 		if length > 10000000 {
 			Utils.LogErrCode(20005)
 			writeBackException("", conn, 20005, -1)
@@ -176,7 +237,7 @@ func HandleChat(conn *net.TCPConn, clientIndex int) {
 			writeBackException(requestMap["method"].(string), conn, 100, requestMap["uid"])
 		}
 	}
-	Utils.LogInfo("clinet--%d is disConnected！\n", clientIndex)
+	Utils.LogInfo("clinet--%d is disConnected！now total client = %d\n", clientIndex, GetCurClientNum())
 }
 
 /**
@@ -219,13 +280,31 @@ func writeBack(conn *net.TCPConn, data []byte) {
 	result := base64.StdEncoding.EncodeToString(data)
 	// 加长度
 	dataLenByte := Utils.Uint32ToBytes(uint32(len(result)))
-	Utils.LogInfo("packageLen：%d\n", len(result))
+	// Utils.LogInfo("packageLen：%d\n", len(result))
 	data = append(dataLenByte[:], []byte(result)...)
 
 	_, err := (*conn).Write(data)
 	if err != nil {
 		Utils.LogInfo("writeBack error, error = %s", err.Error())
 		checkIsExitMap(conn, err)
+	}
+}
+
+/**
+将数据通过base64加密后发送回客户端
+**/
+func writeBackWithoutLock(conn *net.TCPConn, data []byte, chatSyncModel *Model.ChatSyncModel) {
+	// base64加密字符串
+	result := base64.StdEncoding.EncodeToString(data)
+	// 加长度
+	dataLenByte := Utils.Uint32ToBytes(uint32(len(result)))
+	// Utils.LogInfo("packageLen：%d\n", len(result))
+	data = append(dataLenByte[:], []byte(result)...)
+
+	_, err := (*conn).Write(data)
+	if err != nil {
+		Utils.LogInfo("writeBackWithoutLock error, error = %s", err.Error())
+		checkIsexitMapWithoutLock(conn, err, chatSyncModel)
 	}
 }
 
@@ -243,6 +322,19 @@ func writeBackException(method interface{}, conn *net.TCPConn, errCode int, uid 
 }
 
 /**
+将错误编号通过base64加密后发送回客户端
+**/
+func writeBackExceptionWithoutLock(method interface{}, conn *net.TCPConn, errCode int, uid interface{}, chatSyncModel *Model.ChatSyncModel) {
+	data, err := json.Marshal(createResult(method, nil, Utils.LogErrCode(errCode), uid))
+	if err != nil {
+		Utils.LogInfo("writeBackExceptionWithoutLock error, error = %s", err.Error())
+		Utils.LogErrCode(107)
+		return
+	}
+	writeBackWithoutLock(conn, data, chatSyncModel)
+}
+
+/**
 将成功返回值通过base64加密后发送回客户端
 **/
 func writeBackSuccess(conn *net.TCPConn, response map[string]interface{}) {
@@ -253,6 +345,19 @@ func writeBackSuccess(conn *net.TCPConn, response map[string]interface{}) {
 		return
 	}
 	writeBack(conn, data)
+}
+
+/**
+将成功返回值通过base64加密后发送回客户端
+**/
+func writeBackSuccessWithoutLock(conn *net.TCPConn, response map[string]interface{}, chatSyncModel *Model.ChatSyncModel) {
+	data, err := json.Marshal(response)
+	if err != nil {
+		Utils.LogInfo("writeBackSuccessWithoutLock error, error = %s", err.Error())
+		Utils.LogErrCode(107)
+		return
+	}
+	writeBackWithoutLock(conn, data, chatSyncModel)
 }
 
 /**
@@ -277,5 +382,11 @@ func createResult(method, result, err, uid interface{}) map[string]interface{} {
 func checkIsExitMap(conn *net.TCPConn, err error) {
 	if err == io.EOF || err == io.ErrClosedPipe || strings.Contains(err.Error(), "broken pipe") {
 		exitMap(conn)
+	}
+}
+
+func checkIsexitMapWithoutLock(conn *net.TCPConn, err error, chatSyncModel *Model.ChatSyncModel) {
+	if err == io.EOF || err == io.ErrClosedPipe || strings.Contains(err.Error(), "pipe") || strings.Contains(err.Error(), "use of closed network connection") {
+		exitMapWithoutLock(conn, chatSyncModel)
 	}
 }

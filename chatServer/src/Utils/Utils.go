@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
+	"runtime"
 	"strconv"
 )
 
@@ -102,7 +104,7 @@ func ReadConn(conn *net.TCPConn, readLen int) ([]byte, error) {
 			}
 			return dataBuf, err
 		}
-		LogInfo("read num=%d\n", tmpNum)
+		// LogInfo("read num=%d\n", tmpNum)
 		// LogInfo("read data=%v\n", dataBuf)
 		dataLenTag += tmpNum
 		if dataLenTag >= readLen {
@@ -176,4 +178,20 @@ func ChangeMapToPro(src interface{}, typeStr string) interface{} {
 		return src.([]int)
 	}
 	return nil
+}
+
+func CheckPanic(finalErr interface{}) {
+	var stack string
+	LogErrInfo("------------------handler crashed with error (%s)------------------", finalErr)
+	for i := 1; ; i++ {
+		_, file, line, ok := runtime.Caller(i)
+		if !ok {
+			break
+		}
+		// LogErrInfo("------------------file（%s）line(%d) error!", file, line)
+		stack = stack + fmt.Sprintln(file, line)
+	}
+	LogErrInfo("------------------------------------")
+	LogErrInfo("stack = (%s)", stack)
+	LogErrInfo("------------------------------------")
 }

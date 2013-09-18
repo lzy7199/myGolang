@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 )
@@ -17,7 +18,12 @@ func main() {
 	// 定义日志文件，激活配置文件
 	Utils.LogInfo("init log！\n")
 	Utils.LogInfo("log file=%s\n", Config.GetLogOutFile())
+	Utils.LogInfo("logErr file=%s\n", Config.GetLogErrOutFile())
 	err := Utils.InitLogOut(Config.GetLogOutFile())
+	if err != nil {
+		return
+	}
+	err = Utils.InitLogErrOut(Config.GetLogErrOutFile())
 	if err != nil {
 		return
 	}
@@ -34,6 +40,19 @@ func main() {
 		return
 	}
 
+	Utils.LogInfo("cpu核数：%d", runtime.NumCPU())
+	if runtime.NumCPU() > 1 {
+		runtime.GOMAXPROCS(runtime.NumCPU() / 2)
+	}
+
+	defer func() {
+		if finalErr := recover(); finalErr != nil {
+			Utils.LogErrInfo("main finalErr = %s", finalErr)
+			Utils.CheckPanic(finalErr)
+		}
+	}()
+
+	Utils.LogErrInfo("chatserver开始监听错误！")
 	// 注册监听函数
 	Handle.RegisterAllFunc()
 
@@ -61,7 +80,7 @@ func main() {
 		go Handle.HandleChat(conn, i)
 		//		go Handle.Test(i,roomList, conn)
 		//		roomChan <- roomList
-		Utils.LogInfo("clinet--%d is connected！\n", i)
+		Utils.LogInfo("clinet--%d is connected！now total client = %d\n", i, Handle.GetCurClientNum())
 		time.Sleep(1e8)
 	}
 	Utils.LogInfo("chat server close！")

@@ -18,13 +18,14 @@ func (e ServerErr) Error() string {
 func init() {
 	err = map[int]string{
 		/*******************chat服务器错误*****************/
-		20001: "chat read error",           //聊天语句读出异常（流异常）
-		20002: "base64 decode error",       //base64解码异常
-		20003: "json decode error",         //json解码异常
-		20004: "chatType error",            //无此聊天类型
-		20005: "package is too long error", // 包太长
-		20006: "repeat login error",        //重复登陆，踢除
-		29999: "heartbeat package",         //心跳包
+		20001: "chat read error",                 //聊天语句读出异常（流异常）
+		20002: "base64 decode error",             //base64解码异常
+		20003: "json decode error",               //json解码异常
+		20004: "chatType error",                  //无此聊天类型
+		20005: "package is too long error",       // 包太长
+		20006: "repeat login error",              //重复登陆，踢除
+		20007: "target is not exist error",       //对方不存在或未在线
+		20008: "client already over limit error", //该服务器登陆人数超过上限，请稍后再试
 	}
 }
 

@@ -28,6 +28,9 @@ var ConfigFile string
 /**日志文件路径**/
 var logFile string
 
+/**错误日志文件路径**/
+var logErrFile string
+
 /**逻辑服务器列表**/
 var logicServerList []*Model.ServerLevel
 
@@ -40,12 +43,16 @@ flag.StringVar的作用是解析外域传来的参数，这俩句可以解析./m
 **/
 func init() {
 	flag.StringVar(&logFile, "l", "", "log file path and name")
+	flag.StringVar(&logErrFile, "e", "", "logErr file path and name")
 	flag.StringVar(&ConfigFile, "c", "", "config file path and name")
 	if ConfigFile == "" {
 		ConfigFile = "./serverconf.xml"
 	}
 	if logFile == "" {
 		logFile = fmt.Sprintf("./%s.log", time.Now().String())
+	}
+	if logErrFile == "" {
+		logErrFile = "./logErr.log"
 	}
 	ParseXml(ConfigFile)
 }
@@ -80,6 +87,11 @@ func ParseXml(configFile string) {
 		serverLevel.ServerAddress = perServerArray[1]
 		serverLevel.ServerName = perServerArray[2]
 		serverLevel.CurStatus, err = strconv.Atoi(perServerArray[3])
+		if err != nil {
+			Utils.LogErr(err)
+			return
+		}
+		serverLevel.MaxClient, err = strconv.Atoi(perServerArray[4])
 		if err != nil {
 			Utils.LogErr(err)
 			return
@@ -123,4 +135,11 @@ func ReParseConfig() {
 **/
 func GetLogOutFile() string {
 	return logFile
+}
+
+/**
+获得错误日志文件路径
+**/
+func GetLogErrOutFile() string {
+	return logErrFile
 }

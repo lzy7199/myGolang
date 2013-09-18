@@ -10,6 +10,7 @@ type ServerLevel struct {
 	ServerId      int    // 服务器编号
 	ServerName    string // 服务器名称
 	CurStatus     int    // 0:停机维护（维护）（维护时所有字体变成灰色）1：正常（不写字）2：推荐服务器（荐）3：拥挤的服务器（拥挤）4：活动服务器（活动）5：测试服务器（测试）6：新服务器（新）
+	MaxClient     int    // 登陆人数限制
 }
 
 func ChangeMapToServerLevel(m map[string]interface{}) *ServerLevel {
@@ -18,6 +19,7 @@ func ChangeMapToServerLevel(m map[string]interface{}) *ServerLevel {
 	serverLevel.CurStatus = Utils.ChangeMapToPro(m["curStatus"], "int").(int)
 	serverLevel.ServerId = Utils.ChangeMapToPro(m["serverId"], "int").(int)
 	serverLevel.ServerName = Utils.ChangeMapToPro(m["serverName"], "string").(string)
+	serverLevel.MaxClient = Utils.ChangeMapToPro(m["maxClient"], "int").(int)
 	return serverLevel
 }
 
@@ -27,5 +29,6 @@ func ChangeServerLevelToMap(serverLevel *ServerLevel) map[string]string {
 	m["serverAddress"] = serverLevel.ServerAddress
 	m["serverName"] = serverLevel.ServerName
 	m["serverId"] = strconv.Itoa(serverLevel.ServerId)
+	m["maxClient"] = strconv.Itoa(serverLevel.MaxClient)
 	return m
 }

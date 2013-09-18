@@ -7,8 +7,13 @@ import (
 
 var LogOut *log.Logger
 
-/**文件**/
+var LogErrOut *log.Logger
+
+/**日志文件**/
 var files os.File
+
+/**错误日志文件**/
+var errFiles os.File
 
 type logMsg struct {
 	format string
@@ -35,18 +40,49 @@ func InitLogOut(logFile string) error {
 }
 
 /**
+初始化错误日志文件
+**/
+func InitLogErrOut(logErrFile string) error {
+	//设置logErr文件
+	errFiles, err := os.OpenFile(logErrFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0775)
+	if err != nil {
+		return LogErr(err)
+	}
+	LogErrOut = log.New(errFiles, "", 0)
+	LogErrOut.SetFlags(log.Ldate | log.Ltime)
+	return nil
+}
+
+/**
 关闭文件
 **/
 func DeferFiles() {
 	files.Close()
+	errFiles.Close()
 }
 
 /**
 写到日志chan中
 **/
 func LogInfo(format string, info ...interface{}) {
-	if logChan != nil {
-		logChan <- &logMsg{format, info}
+	// if logChan != nil {
+	// 	logChan <- &logMsg{format, info}
+	// } else {
+	// 	log.Printf(format, info...)
+	// }
+	if LogOut != nil {
+		LogOut.Printf(format, info...)
+	} else {
+		log.Printf(format, info...)
+	}
+}
+
+/**
+写错误日志
+**/
+func LogErrInfo(format string, info ...interface{}) {
+	if LogErrOut != nil {
+		LogErrOut.Printf(format, info...)
 	} else {
 		log.Printf(format, info...)
 	}
